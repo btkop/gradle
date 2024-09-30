@@ -23,7 +23,9 @@ import java.io.File
 internal
 interface ConfigurationCacheStateStore {
 
-    data class StateFile(val stateType: StateType, val file: File)
+    data class StateFile(val stateType: StateType, val file: File) {
+        val name: String get() = file.name
+    }
 
     fun assignSpoolFile(stateType: StateType): StateFile
 

@@ -129,6 +129,12 @@ class ConfigurationCacheRepository(
                 relatedStateFileFor(file, path),
                 stateType
             )
+
+        override fun stateFileForGlobalValues(): ConfigurationCacheStateFile =
+            ReadableConfigurationCacheStateFile(
+                globalsFileFor(file),
+                StateType.WorkGlobals
+            )
     }
 
     private
@@ -170,6 +176,13 @@ class ConfigurationCacheRepository(
             WriteableConfigurationCacheStateFile(
                 relatedStateFileFor(file, path),
                 stateType,
+                onFileAccess
+            )
+
+        override fun stateFileForGlobalValues(): ConfigurationCacheStateFile =
+            WriteableConfigurationCacheStateFile(
+                globalsFileFor(file),
+                StateType.WorkGlobals,
                 onFileAccess
             )
     }
@@ -302,4 +315,11 @@ private
 fun relatedStateFileFor(parentStateFile: File, path: Path) =
     parentStateFile.run {
         resolveSibling("${path.segments().joinToString("_", if (path.isAbsolute) "_" else "")}.$name")
+    }
+
+
+private
+fun globalsFileFor(parentStateFile: File) =
+    parentStateFile.run {
+        resolveSibling(".globals.$name")
     }
