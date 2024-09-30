@@ -17,8 +17,11 @@
 package org.gradle.internal.component.resolution.failure.transform;
 
 import com.google.common.collect.ImmutableList;
+import org.gradle.api.artifacts.transform.TransformAction;
 import org.gradle.api.internal.attributes.ImmutableAttributes;
 
+import java.util.HashSet;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 /**
@@ -63,5 +66,70 @@ public final class TransformationChainData {
      */
     public ImmutableAttributes getFinalAttributes() {
         return finalAttributes;
+    }
+
+    public TransformationFingerprint fingerprint() {
+        return new TransformationFingerprint(this);
+    }
+
+    public static final class TransformationFingerprint {
+        private final HashSet<Step> steps;
+
+        public TransformationFingerprint(TransformationChainData chain) {
+            steps = chain.steps.stream()
+                .map(s -> new Step(s.getFromAttributes(), s.getToAttributes(), s.getTransformActionClass()))
+                .collect(Collectors.toCollection(HashSet::new));
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) {
+                return true;
+            }
+            if (o == null || getClass() != o.getClass()) {
+                return false;
+            }
+
+            TransformationFingerprint that = (TransformationFingerprint) o;
+            return Objects.equals(steps, that.steps);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hashCode(steps);
+        }
+
+        private static final class Step {
+            private final ImmutableAttributes fromAttributes;
+            private final ImmutableAttributes toAttributes;
+            private final Class<? extends TransformAction<?>> actionType;
+
+            private Step(ImmutableAttributes fromAttributes, ImmutableAttributes toAttributes, Class<? extends TransformAction<?>> actionType) {
+                this.fromAttributes = fromAttributes;
+                this.toAttributes = toAttributes;
+                this.actionType = actionType;
+            }
+
+            @Override
+            public boolean equals(Object o) {
+                if (this == o) {
+                    return true;
+                }
+                if (o == null || getClass() != o.getClass()) {
+                    return false;
+                }
+
+                Step node = (Step) o;
+                return fromAttributes.equals(node.fromAttributes) && toAttributes.equals(node.toAttributes) && actionType.equals(node.actionType);
+            }
+
+            @Override
+            public int hashCode() {
+                int result = fromAttributes.hashCode();
+                result = 31 * result + toAttributes.hashCode();
+                result = 31 * result + actionType.hashCode();
+                return result;
+            }
+        }
     }
 }

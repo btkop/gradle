@@ -16,7 +16,7 @@
 
 package org.gradle.api.internal.artifacts.transform;
 
-import org.gradle.api.artifacts.transform.TransformAction;
+import com.google.common.collect.Iterables;
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.artifact.BrokenResolvedArtifactSet;
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.artifact.ResolvedArtifactSet;
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.artifact.ResolvedVariant;
@@ -28,15 +28,14 @@ import org.gradle.api.internal.attributes.immutable.ImmutableAttributesSchema;
 import org.gradle.api.internal.attributes.matching.AttributeMatcher;
 import org.gradle.internal.component.model.AttributeMatchingExplanationBuilder;
 import org.gradle.internal.component.resolution.failure.ResolutionFailureHandler;
-import org.gradle.internal.deprecation.DeprecationLogger;
+import org.gradle.internal.component.resolution.failure.transform.TransformationChainData.TransformationFingerprint;
+import org.gradle.internal.component.resolution.failure.transform.TransformedVariantConverter;
 
 import java.util.ArrayList;
-import java.util.HashSet;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -49,7 +48,6 @@ import java.util.stream.Collectors;
  * to allow the caller to handle failures in a consistent manner as during graph variant selection.
  */
 public class AttributeMatchingArtifactVariantSelector implements ArtifactVariantSelector {
-
     private final ImmutableAttributesSchema consumerSchema;
     private final TransformUpstreamDependenciesResolver dependenciesResolver;
     private final ConsumerProvidedVariantFinder consumerProvidedVariantFinder;
@@ -57,6 +55,7 @@ public class AttributeMatchingArtifactVariantSelector implements ArtifactVariant
     private final AttributeSchemaServices attributeSchemaServices;
     private final TransformedVariantFactory transformedVariantFactory;
     private final ResolutionFailureHandler failureProcessor; // TODO: rename to failure handler
+    private final TransformedVariantConverter transformedVariantConverter = new TransformedVariantConverter();
 
     AttributeMatchingArtifactVariantSelector(
         ImmutableAttributesSchema consumerSchema,
@@ -102,7 +101,7 @@ public class AttributeMatchingArtifactVariantSelector implements ArtifactVariant
 
         // If there are multiple potential artifact transform variants, perform attribute matching to attempt to find the best.
         if (transformedVariants.size() > 1) {
-            transformedVariants = tryDisambiguate(matcher, transformedVariants, componentRequested, explanationBuilder, producer, componentRequested, transformedVariants, failureProcessor);
+            transformedVariants = tryDisambiguate(matcher, transformedVariants, componentRequested, explanationBuilder, producer, componentRequested, transformedVariants, failureProcessor, transformedVariantConverter);
         }
 
         if (transformedVariants.size() == 1) {
@@ -137,7 +136,8 @@ public class AttributeMatchingArtifactVariantSelector implements ArtifactVariant
         ResolvedVariantSet targetVariantSet,
         ImmutableAttributes requestedAttributes,
         List<TransformedVariant> transformedVariants,
-        ResolutionFailureHandler failureHandler
+        ResolutionFailureHandler failureHandler,
+        TransformedVariantConverter transformedVariantConverter
     ) {
         List<TransformedVariant> matches = matcher.matchMultipleCandidates(candidates, componentRequested, explanationBuilder);
         if (matches.size() == 1) {
@@ -164,10 +164,10 @@ public class AttributeMatchingArtifactVariantSelector implements ArtifactVariant
             throw new IllegalStateException("No different transformations found out of: " + matches.size() + " matches; this can't happen!");
         } else if (differentTransforms.size() == 1) {
             // We chose some arbitrary transformation chain even though there were mutually compatible
-            // This Questionable behavior - where the "different" chains just resequencings of the same chain?
-            List<TransformedVariant> nonJustResequencedChains = findDistinctTransformationChains(matches);
-            if (nonJustResequencedChains.size() > 1) {
-                throw failureHandler.ambiguousArtifactTransformsFailure(targetVariantSet, requestedAttributes, nonJustResequencedChains);
+            // This Questionable behavior - where the "different" chains just re-sequencings of the same chain?
+            List<TransformedVariant> notJustResequencedChains = findDistinctTransformationChains(matches, transformedVariantConverter);
+            if (notJustResequencedChains.size() > 1) {
+                throw failureHandler.ambiguousArtifactTransformsFailure(targetVariantSet, requestedAttributes, notJustResequencedChains);
 
                 // TODO: maybe deprecate first
 //            DeprecationLogger.deprecateBehaviour("FOO")
@@ -183,78 +183,19 @@ public class AttributeMatchingArtifactVariantSelector implements ArtifactVariant
         return differentTransforms;
     }
 
-    private static List<TransformedVariant> findDistinctTransformationChains(List<TransformedVariant> allChains) {
+    private static List<TransformedVariant> findDistinctTransformationChains(List<TransformedVariant> variants, TransformedVariantConverter transformedVariantConverter) {
         // Map from a fingerprint to the variants that contain such a fingerprint
         Map<TransformationFingerprint, List<TransformedVariant>> distinctChains = new LinkedHashMap<>();
 
         // Map each transformation chain's unique fingerprint to the list of chains sharing it
-        allChains.forEach(chain -> distinctChains.computeIfAbsent(new TransformationFingerprint(chain), f -> new ArrayList<>()).add(chain));
+        variants.forEach(variant -> {
+            TransformationFingerprint fingerprint = Iterables.getOnlyElement(transformedVariantConverter.convert(Collections.singletonList(variant))).fingerprint();
+            distinctChains.computeIfAbsent(fingerprint, f -> new ArrayList<>()).add(variant);
+        });
 
         // Return an arbitrary representative of each unique transformation chain
         return distinctChains.values().stream()
             .map(transformedVariants -> transformedVariants.iterator().next())
             .collect(Collectors.toList());
-    }
-
-    private static final class TransformationFingerprint {
-        private final Set<Node> steps;
-
-        public TransformationFingerprint(TransformedVariant variant) {
-            steps = new HashSet<>();
-
-            steps.add(variant.getTransformChain().)
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) {
-                return true;
-            }
-            if (o == null || getClass() != o.getClass()) {
-                return false;
-            }
-
-            TransformationFingerprint that = (TransformationFingerprint) o;
-            return Objects.equals(steps, that.steps);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hashCode(steps);
-        }
-
-
-        private static final class Node {
-            private final ImmutableAttributes fromAttributes;
-            private final ImmutableAttributes toAttributes;
-            private final Class<? extends TransformAction<?>> actionType;
-
-            private Node(ImmutableAttributes fromAttributes, ImmutableAttributes toAttributes, Class<? extends TransformAction<?>> actionType) {
-                this.fromAttributes = fromAttributes;
-                this.toAttributes = toAttributes;
-                this.actionType = actionType;
-            }
-
-            @Override
-            public boolean equals(Object o) {
-                if (this == o) {
-                    return true;
-                }
-                if (o == null || getClass() != o.getClass()) {
-                    return false;
-                }
-
-                Node node = (Node) o;
-                return fromAttributes.equals(node.fromAttributes) && toAttributes.equals(node.toAttributes) && actionType.equals(node.actionType);
-            }
-
-            @Override
-            public int hashCode() {
-                int result = fromAttributes.hashCode();
-                result = 31 * result + toAttributes.hashCode();
-                result = 31 * result + actionType.hashCode();
-                return result;
-            }
-        }
     }
 }

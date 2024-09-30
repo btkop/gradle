@@ -120,5 +120,9 @@ class ArtifactTransformEdgeCasesIntegrationTest extends AbstractIntegrationSpec 
 
         expect:
         fails "forceResolution"
+
+        failure.assertHasDescription("Could not determine the dependencies of task ':forceResolution'.")
+        failure.assertHasCause("Could not resolve all dependencies for configuration ':resolveMe'.")
+        failure.assertHasErrorOutput("""   > Found multiple transforms that can produce a variant of root project : with requested attributes:""")
     }
 }
