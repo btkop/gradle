@@ -19,6 +19,7 @@ package org.gradle.smoketests
 import com.gradle.develocity.testing.annotations.LocalOnly
 import org.gradle.integtests.fixtures.android.AndroidHome
 import org.gradle.test.fixtures.dsl.GradleDsl
+import org.gradle.util.GradleVersion
 import org.gradle.util.internal.VersionNumber
 
 import static org.gradle.integtests.fixtures.versions.KotlinGradlePluginVersions.hasConfigurationCacheWarnings
@@ -54,7 +55,20 @@ abstract class AbstractKotlinPluginAndroidSmokeTest extends AbstractSmokeTest im
         def kotlinPluginVersionNumber = VersionNumber.parse(kotlinPluginVersion)
 
         when:
-        def result = mixedRunner(parallel, androidPluginVersion, kotlinPluginVersionNumber, 'clean', ":app:testDebugUnitTestCoverage").build()
+        def result = mixedRunner(parallel, androidPluginVersion, kotlinPluginVersionNumber, 'clean', ":app:testDebugUnitTestCoverage")
+            .expectDeprecationWarning(
+                "Declaring an 'is-' property with a Boolean type has been deprecated. Starting with Gradle 9.0, this property will be ignored by Gradle. The combination of method name and return type is not consistent with Java Bean property rules and will become unsupported in future versions of Groovy. Add a method named 'getCrunchPngs' with the same behavior and mark the old one with @Deprecated, or change the type of 'com.android.build.gradle.internal.dsl.BuildType\$AgpDecorated.isCrunchPngs' (and the setter) to 'boolean'. Consult the upgrading guide for further information: https://docs.gradle.org/${GradleVersion.current().version}/userguide/upgrading_version_8.html#groovy_boolean_properties",
+                "https://issuetracker.google.com/issues/370546370"
+            )
+            .expectDeprecationWarning(
+                "Declaring an 'is-' property with a Boolean type has been deprecated. Starting with Gradle 9.0, this property will be ignored by Gradle. The combination of method name and return type is not consistent with Java Bean property rules and will become unsupported in future versions of Groovy. Add a method named 'getUseProguard' with the same behavior and mark the old one with @Deprecated, or change the type of 'com.android.build.gradle.internal.dsl.BuildType.isUseProguard' (and the setter) to 'boolean'. Consult the upgrading guide for further information: https://docs.gradle.org/${GradleVersion.current().version}/userguide/upgrading_version_8.html#groovy_boolean_properties",
+                "https://issuetracker.google.com/issues/370546370"
+            )
+            .expectDeprecationWarning(
+                "Declaring an 'is-' property with a Boolean type has been deprecated. Starting with Gradle 9.0, this property will be ignored by Gradle. The combination of method name and return type is not consistent with Java Bean property rules and will become unsupported in future versions of Groovy. Add a method named 'getWearAppUnbundled' with the same behavior and mark the old one with @Deprecated, or change the type of 'com.android.build.api.variant.impl.ApplicationVariantImpl.isWearAppUnbundled' (and the setter) to 'boolean'. Consult the upgrading guide for further information: https://docs.gradle.org/${GradleVersion.current().version}/userguide/upgrading_version_8.html#groovy_boolean_properties",
+                "https://issuetracker.google.com/issues/370546370"
+            )
+            .build()
 
         then:
         result.task(':app:testDebugUnitTestCoverage').outcome == SUCCESS
